@@ -121,6 +121,7 @@ function openEnvelopeAnimation(e) {
     if (instructionText) {
       instructionText.innerText = "✨ ¡Sobre abierto! Toca 'VER INVITACIÓN COMPLETA' para continuar";
       instructionText.classList.remove("animate-pulse");
+      instructionText.classList.remove("hidden");
     }
   };
 
@@ -135,7 +136,6 @@ function openEnvelopeAnimation(e) {
     if (playPromise !== undefined) {
       playPromise.catch(err => {
         console.warn("Reproducción de video de sobre:", err);
-        revealInvitationCard();
       });
     }
 
@@ -1716,8 +1716,9 @@ window.addEventListener("message", (event) => {
       introHeader.classList.remove("header-full-disappear");
     }
     if (instructionText) {
-      instructionText.innerText = "✨ Toca el auténtico sello de lacre dorado para abrir el sobre";
-      instructionText.classList.add("animate-pulse");
+      instructionText.innerText = "";
+      instructionText.classList.remove("animate-pulse");
+      instructionText.classList.add("hidden");
     }
     
     // 3. Capturar el HTML completo y limpio

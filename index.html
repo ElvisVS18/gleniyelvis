@@ -10,8 +10,8 @@
   <meta property="og:description" content="¡Nos Casamos! 14 de Noviembre de 2026 en Cusco. Toca para ver la invitación oficial y confirmar tu asistencia.">
   <meta property="og:type" content="website">
 
-  <!-- Preload de Prioridad Máxima para el Sobre de Entrada Optimizado (94 KB) -->
-  <link rel="preload" as="image" href="img/sobre_cerrado_opt.jpg" fetchpriority="high">
+  <!-- Preload de Prioridad Máxima para el Video del Sobre -->
+  <link rel="preload" as="video" href="img/video_sobre.mp4" type="video/mp4">
 
   <!-- Tailwind CSS CDN (Diferido para no bloquear renderizado inicial) -->
   <script src="https://cdn.tailwindcss.com" defer></script>
@@ -100,10 +100,10 @@
                  class="envelope-video" 
                  playsinline 
                  webkit-playsinline 
-                 muted 
+                 false
                  preload="auto">
-            <source src="img/video_sobre.mp4" type="video/mp4">
-            <source src="video_sobre.mp4" type="video/mp4">
+            <source src="img/video_sobre.mp4#t=0.001" type="video/mp4">
+            <source src="video_sobre.mp4#t=0.001" type="video/mp4">
           </video>
 
           <!-- BOTÓN INTERACTIVO EXACTAMENTE SOBRE EL SELLO: DESAPERCIBIDO (TRANSPARENTE) -->
@@ -118,11 +118,9 @@
 
       </div>
 
-      <!-- Pie de apoyo interactivo -->
+      <!-- Pie de apoyo interactivo (Oculto en pantalla inicial por preferencia de los novios) -->
       <div class="text-center mt-3 space-y-1 max-w-sm z-10">
-        <p id="instructionText" data-edit="modal_instruction" class="text-xs font-cormorant text-[#e8d7ad] font-medium italic animate-pulse">
-          ✨ Toca el auténtico sello de lacre dorado para abrir el sobre
-        </p>
+        <p id="instructionText" data-edit="modal_instruction" class="text-xs font-cormorant text-[#e8d7ad] font-medium italic hidden"></p>
       </div>
 
     </div>
