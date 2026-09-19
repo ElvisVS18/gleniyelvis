@@ -418,6 +418,21 @@ function copyToClipboard(text, label) {
   });
 }
 
+function copyBankNumber(type) {
+  let num = "";
+  let label = "";
+  if (type === 'bcp') {
+    const el = document.getElementById("bank-bcp-number");
+    num = el ? el.textContent.trim().replace(/[^0-9]/g, '') : '19112345678012';
+    label = "Cuenta BCP";
+  } else if (type === 'yape') {
+    const el = document.getElementById("bank-yape-number");
+    num = el ? el.textContent.trim().replace(/[^0-9]/g, '') : '987654321';
+    label = "Número Yape / Plin";
+  }
+  copyToClipboard(num, label);
+}
+
 function showToast(message) {
   const toast = document.getElementById("toast-notification");
   const toastMsg = document.getElementById("toast-message");
@@ -432,17 +447,14 @@ function showToast(message) {
 }
 
 // -------------------------------------------------------------
-// Control de Modales (Cuentas Bancarias, RSVP y Buzón de Deseos)
+// Control de Modales (RSVP y Buzón de Deseos)
 // -------------------------------------------------------------
 function openBankModal() {
-  const modal = document.getElementById("bank-modal");
-  if (modal) modal.classList.remove("hidden");
+  const el = document.getElementById("bank-bcp-number");
+  if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
-function closeBankModal() {
-  const modal = document.getElementById("bank-modal");
-  if (modal) modal.classList.add("hidden");
-}
+function closeBankModal() {}
 
 const GOOGLE_SHEET_URL = "https://script.google.com/macros/s/AKfycbwylXAgFT3TtUweip5Fctvr77VXMgHqLRNKkHW7I1twy9lRln3LTJtfNs5br9ClcDKCTg/exec";
 
@@ -1584,13 +1596,273 @@ document.addEventListener("DOMContentLoaded", () => {
   // Notificar al panel editor si estamos dentro de un iframe
   try {
     if (window.parent && window.parent !== window) {
-      window.parent.postMessage({ type: "INVITATION_LOADED" }, "*");
+      sendAllElementsToParent();
+      attachIframeClickListeners();
     }
   } catch (e) {}
 });
 
+// Helper: convertir RGB a Hex
+function colorRgbToHex(rgb) {
+  if (!rgb || rgb === "transparent") return "#543550";
+  if (rgb.startsWith("#")) return rgb;
+  const match = rgb.match(/\d+/g);
+  if (!match || match.length < 3) return "#543550";
+  const r = parseInt(match[0], 10).toString(16).padStart(2, '0');
+  const g = parseInt(match[1], 10).toString(16).padStart(2, '0');
+  const b = parseInt(match[2], 10).toString(16).padStart(2, '0');
+  return `#${r}${g}${b}`;
+}
+
+// Extraer propiedades calculadas e inline de un elemento
+function extractEditableData(el) {
+  if (!el) return null;
+
+  // Caso especial: Corazón de la fecha (SVG interactivo)
+  if (el.getAttribute("data-edit") === "date_heart_badge" || el.classList.contains("date-heart-badge")) {
+    const heartPath = el.querySelector("#dateHeartPath") || el.querySelector("path[fill]:not([fill='#faf7f2'])");
+    const currentColor = heartPath ? (heartPath.style.fill || heartPath.getAttribute("fill") || "#6e4c69") : "#6e4c69";
+    let widthPx = 86;
+    if (el.style.width) {
+      widthPx = parseInt(el.style.width, 10);
+    } else {
+      const comp = window.getComputedStyle(el);
+      widthPx = Math.round(parseFloat(comp.width)) || 86;
+    }
+    return {
+      text: "Corazón Decorativo (Vector SVG)",
+      size: widthPx,
+      bold: false,
+      italic: false,
+      color: colorRgbToHex(currentColor),
+      font: "font-cormorant",
+      align: "center",
+      lineHeight: "1.35"
+    };
+  }
+
+  // Caso especial: Números del contador regresivo (Días, Horas, Minutos, Segundos)
+  if (el.getAttribute("data-edit") === "countdown_digits" || el.classList.contains("countdown-digit-val")) {
+    const daysEl = document.getElementById("countdown-days") || el;
+    const computedDays = window.getComputedStyle(daysEl);
+    let pxSize = 36;
+    if (daysEl.style.fontSize) {
+      pxSize = parseInt(daysEl.style.fontSize, 10);
+    } else if (computedDays && computedDays.fontSize) {
+      pxSize = Math.round(parseFloat(computedDays.fontSize));
+    }
+    const rawColor = daysEl.style.color || (computedDays ? computedDays.color : "#543550");
+    const hexColor = colorRgbToHex(rawColor);
+    const fw = daysEl.style.fontWeight || (computedDays ? computedDays.fontWeight : "");
+    const isBold = (fw === "bold" || parseInt(fw, 10) >= 600);
+    const fs = daysEl.style.fontStyle || (computedDays ? computedDays.fontStyle : "");
+    const isItalic = (fs === "italic");
+    let fontClass = "font-serif-title";
+    if (daysEl.classList.contains("font-aniyah")) fontClass = "font-aniyah";
+    else if (daysEl.classList.contains("font-cormorant")) fontClass = "font-cormorant";
+    else if (daysEl.classList.contains("font-script")) fontClass = "font-script";
+    else if (daysEl.classList.contains("font-sans")) fontClass = "font-sans";
+    else if (daysEl.classList.contains("font-cinzel")) fontClass = "font-cinzel";
+
+    return {
+      text: "Valores Numéricos (Generados por el reloj)",
+      size: pxSize,
+      bold: isBold,
+      italic: isItalic,
+      color: hexColor,
+      font: fontClass,
+      align: "center",
+      lineHeight: "1"
+    };
+  }
+
+  // Caso especial: Marco y Fondo de las Tarjetas Bancarias
+  if (el.getAttribute("data-edit") === "bank_cards_style" || el.classList.contains("bank-card-box")) {
+    const bcpCard = document.getElementById("bank-card-bcp") || el;
+    const comp = window.getComputedStyle(bcpCard);
+    let opacityPct = 95;
+    const bg = bcpCard.style.backgroundColor || (comp ? comp.backgroundColor : "");
+    if (bg === "transparent" || bg === "rgba(0, 0, 0, 0)") {
+      opacityPct = 0;
+    } else if (bg.startsWith("rgba")) {
+      const parts = bg.match(/[\d.]+/g);
+      if (parts && parts.length >= 4) {
+        opacityPct = Math.round(parseFloat(parts[3]) * 100);
+      }
+    } else if (bg === "rgb(255, 255, 255)" || bg === "#ffffff") {
+      opacityPct = 100;
+    }
+    const hasBorder = bcpCard.style.borderColor !== "transparent";
+
+    return {
+      text: "Marco de Tarjetas Bancarias (Fondo y Transparencia)",
+      size: opacityPct,
+      opacity: opacityPct,
+      border: hasBorder,
+      bold: false,
+      italic: false,
+      color: "#543550",
+      font: "font-serif-title",
+      align: "center",
+      lineHeight: "1.35"
+    };
+  }
+
+  // Caso especial: Botones de copia bancaria (BCP y Yape/Plin)
+  if (el.getAttribute("data-edit") === "bank_bcp_btn" || el.getAttribute("data-edit") === "bank_yape_btn" || el.classList.contains("bank-copy-btn")) {
+    const computedBtn = window.getComputedStyle(el);
+    const textSpan = el.querySelector(".btn-text-content");
+    const btnText = textSpan ? textSpan.textContent.trim() : (el.textContent ? el.textContent.trim() : "");
+    
+    // Tamaño de letra (px)
+    let pxSize = 12;
+    if (el.style.fontSize) {
+      pxSize = parseInt(el.style.fontSize, 10);
+    } else if (computedBtn && computedBtn.fontSize) {
+      pxSize = Math.round(parseFloat(computedBtn.fontSize)) || 12;
+    }
+
+    // Grosor / Padding vertical (px)
+    let paddingY = 10;
+    if (el.style.paddingTop) {
+      paddingY = parseInt(el.style.paddingTop, 10);
+    } else if (computedBtn && computedBtn.paddingTop) {
+      paddingY = Math.round(parseFloat(computedBtn.paddingTop)) || 10;
+    }
+
+    // Modo de ancho
+    const isCompact = el.classList.contains("w-auto") || (el.style.width && el.style.width === "fit-content");
+    const widthMode = isCompact ? "compact" : "full";
+
+    // Color de fondo del botón
+    const rawBg = el.style.backgroundColor || (computedBtn ? computedBtn.backgroundColor : "#fceef1");
+    const hexBg = colorRgbToHex(rawBg);
+
+    // Color de texto del botón
+    const rawColor = el.style.color || (computedBtn ? computedBtn.color : "#6e4c69");
+    const hexColor = colorRgbToHex(rawColor);
+
+    // Negrita
+    const fw = el.style.fontWeight || (computedBtn ? computedBtn.fontWeight : "");
+    const isBold = (fw === "bold" || parseInt(fw, 10) >= 600);
+
+    // Cursiva
+    const fs = el.style.fontStyle || (computedBtn ? computedBtn.fontStyle : "");
+    const isItalic = (fs === "italic");
+
+    // Fuente
+    let fontClass = "font-sans";
+    if (el.classList.contains("font-cormorant")) fontClass = "font-cormorant";
+    else if (el.classList.contains("font-serif-title")) fontClass = "font-serif-title";
+    else if (el.classList.contains("font-aniyah")) fontClass = "font-aniyah";
+    else if (el.classList.contains("font-script")) fontClass = "font-script";
+    else if (el.classList.contains("font-cinzel")) fontClass = "font-cinzel";
+
+    return {
+      text: btnText,
+      size: pxSize,
+      paddingY: paddingY,
+      widthMode: widthMode,
+      btnBgColor: hexBg,
+      color: hexColor,
+      bold: isBold,
+      italic: isItalic,
+      font: fontClass,
+      align: "center",
+      lineHeight: "1"
+    };
+  }
+
+  const computed = window.getComputedStyle(el);
+  
+  // Tamaño en px
+  let pxSize = 18;
+  if (el.style.fontSize) {
+    pxSize = parseInt(el.style.fontSize, 10);
+  } else if (computed && computed.fontSize) {
+    pxSize = Math.round(parseFloat(computed.fontSize));
+  }
+
+  // Negrita
+  const fw = el.style.fontWeight || (computed ? computed.fontWeight : "");
+  const isBold = (fw === "bold" || parseInt(fw, 10) >= 600);
+
+  // Cursiva
+  const fs = el.style.fontStyle || (computed ? computed.fontStyle : "");
+  const isItalic = (fs === "italic");
+
+  // Color hex
+  const rawColor = el.style.color || (computed ? computed.color : "#543550");
+  const hexColor = colorRgbToHex(rawColor);
+
+  // Clase de fuente tipográfica
+  let fontClass = "font-cormorant";
+  if (el.classList.contains("font-aniyah")) fontClass = "font-aniyah";
+  else if (el.classList.contains("font-serif-title")) fontClass = "font-serif-title";
+  else if (el.classList.contains("font-script")) fontClass = "font-script";
+  else if (el.classList.contains("font-sans")) fontClass = "font-sans";
+  else if (el.classList.contains("font-cinzel")) fontClass = "font-cinzel";
+
+  // Alineación
+  const textAlign = el.style.textAlign || (computed ? computed.textAlign : "center");
+
+  // Interlineado
+  let lineHeight = el.style.lineHeight || (computed ? computed.lineHeight : "1.35");
+
+  // Texto
+  let text = "";
+  const clone = el.cloneNode(true);
+  clone.querySelectorAll("br").forEach(br => br.replaceWith("\n"));
+  text = clone.textContent.trim();
+
+  return {
+    text: text,
+    size: pxSize,
+    bold: isBold,
+    italic: isItalic,
+    color: hexColor,
+    font: fontClass,
+    align: textAlign,
+    lineHeight: lineHeight
+  };
+}
+
+function sendAllElementsToParent() {
+  if (!window.parent || window.parent === window) return;
+  const elements = {};
+  document.querySelectorAll("[data-edit]").forEach(el => {
+    const key = el.getAttribute("data-edit");
+    if (key) {
+      elements[key] = extractEditableData(el);
+    }
+  });
+  window.parent.postMessage({
+    type: "INVITATION_LOADED",
+    elements: elements
+  }, "*");
+}
+
+function attachIframeClickListeners() {
+  document.querySelectorAll("[data-edit]").forEach(el => {
+    el.style.cursor = "pointer";
+    el.setAttribute("title", "Toca para editar en el panel");
+    el.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const key = el.getAttribute("data-edit");
+      if (key && window.parent) {
+        window.parent.postMessage({
+          type: "ELEMENT_CLICKED",
+          key: key,
+          data: extractEditableData(el)
+        }, "*");
+      }
+    });
+  });
+}
+
 // -------------------------------------------------------------
-// Sincronización en tiempo real con panel_editor.html
+// Sincronización en tiempo real con editor.html (bidireccional)
 // -------------------------------------------------------------
 window.addEventListener("message", (event) => {
   const data = event.data;
@@ -1599,6 +1871,160 @@ window.addEventListener("message", (event) => {
   if (data.type === "UPDATE_FIELD") {
     const el = document.querySelector(`[data-edit="${data.key}"]`) || (data.selector ? document.querySelector(data.selector) : null);
     if (el) {
+      // Caso especial: Corazón de la fecha
+      if (data.key === "date_heart_badge" || el.classList.contains("date-heart-badge")) {
+        if (data.size !== undefined) {
+          const sz = parseInt(data.size, 10);
+          if (!isNaN(sz)) {
+            el.style.width = `${sz}px`;
+            el.style.height = `${Math.round(sz * 0.95)}px`;
+          }
+        }
+        if (data.color !== undefined) {
+          const heartPath = el.querySelector("#dateHeartPath") || el.querySelector("path[fill]:not([fill='#faf7f2'])");
+          if (heartPath) {
+            heartPath.setAttribute("fill", data.color);
+            heartPath.style.fill = data.color;
+          }
+        }
+        return;
+      }
+
+      // Caso especial: Valores numéricos de la cuenta regresiva (Días, Horas, Minutos, Segundos)
+      if (data.key === "countdown_digits" || el.getAttribute("data-edit") === "countdown_digits" || el.classList.contains("countdown-digit-val")) {
+        const digits = document.querySelectorAll(".countdown-digit-val, #countdown-days, #countdown-hours, #countdown-minutes, #countdown-seconds");
+        const separators = document.querySelectorAll(".countdown-separator");
+
+        if (data.size !== undefined) {
+          const sz = parseInt(data.size, 10);
+          if (!isNaN(sz)) {
+            digits.forEach(d => {
+              d.style.fontSize = `${sz}px`;
+            });
+            const sepSize = Math.max(14, Math.round(sz * 0.7));
+            separators.forEach(s => {
+              s.style.fontSize = `${sepSize}px`;
+            });
+          }
+        }
+        if (data.color !== undefined) {
+          digits.forEach(d => {
+            d.style.color = data.color;
+            d.style.setProperty("color", data.color, "important");
+          });
+        }
+        if (data.bold !== undefined) {
+          digits.forEach(d => {
+            d.style.fontWeight = data.bold ? "bold" : "normal";
+          });
+        }
+        if (data.italic !== undefined) {
+          digits.forEach(d => {
+            d.style.fontStyle = data.italic ? "italic" : "normal";
+          });
+        }
+        if (data.font !== undefined) {
+          const fontClasses = ["font-cormorant", "font-aniyah", "font-serif-title", "font-script", "font-sans", "font-cinzel"];
+          digits.forEach(d => {
+            fontClasses.forEach(c => d.classList.remove(c));
+            if (data.font) d.classList.add(data.font);
+          });
+        }
+        return;
+      }
+
+      // Caso especial: Estilo y transparencia del marco de tarjetas bancarias
+      if (data.key === "bank_cards_style" || el.getAttribute("data-edit") === "bank_cards_style" || el.classList.contains("bank-card-box")) {
+        const cards = document.querySelectorAll(".bank-card-box");
+        const val = (data.opacity !== undefined) ? parseInt(data.opacity, 10) : (data.size !== undefined ? parseInt(data.size, 10) : NaN);
+        if (!isNaN(val)) {
+          const alpha = Math.max(0, Math.min(100, val)) / 100;
+          cards.forEach(c => {
+            if (alpha === 0) {
+              c.style.backgroundColor = "transparent";
+              c.style.boxShadow = "none";
+              c.style.backdropFilter = "none";
+              c.style.webkitBackdropFilter = "none";
+            } else {
+              c.style.backgroundColor = `rgba(255, 255, 255, ${alpha})`;
+              c.style.boxShadow = alpha >= 0.2 ? "0 4px 15px rgba(0, 0, 0, 0.05)" : "none";
+              c.style.backdropFilter = alpha < 1 ? "blur(4px)" : "none";
+              c.style.webkitBackdropFilter = alpha < 1 ? "blur(4px)" : "none";
+            }
+          });
+        }
+        if (data.border !== undefined) {
+          cards.forEach(c => {
+            if (data.border === false || data.border === "none") {
+              c.style.borderColor = "transparent";
+            } else {
+              c.style.borderColor = "";
+            }
+          });
+        }
+        return;
+      }
+
+      // Caso especial: Botones de copia bancaria (BCP y Yape/Plin)
+      if (data.key === "bank_bcp_btn" || data.key === "bank_yape_btn" || el.classList.contains("bank-copy-btn")) {
+        if (data.text !== undefined) {
+          const textSpan = el.querySelector(".btn-text-content");
+          if (textSpan) {
+            textSpan.textContent = data.text;
+          } else {
+            const svg = el.querySelector("svg");
+            el.innerHTML = "";
+            if (svg) el.appendChild(svg);
+            const newSpan = document.createElement("span");
+            newSpan.className = "btn-text-content";
+            newSpan.textContent = data.text;
+            el.appendChild(newSpan);
+          }
+        }
+        if (data.size !== undefined) {
+          el.style.fontSize = `${data.size}px`;
+        }
+        if (data.paddingY !== undefined) {
+          const py = parseInt(data.paddingY, 10);
+          if (!isNaN(py)) {
+            el.style.paddingTop = `${py}px`;
+            el.style.paddingBottom = `${py}px`;
+          }
+        }
+        if (data.widthMode !== undefined) {
+          if (data.widthMode === "compact") {
+            el.classList.remove("w-full");
+            el.classList.add("w-auto", "mx-auto", "px-6");
+            el.style.width = "fit-content";
+            el.style.margin = "0 auto";
+          } else {
+            el.classList.add("w-full");
+            el.classList.remove("w-auto", "mx-auto", "px-6");
+            el.style.width = "100%";
+            el.style.margin = "";
+          }
+        }
+        if (data.btnBgColor !== undefined) {
+          el.style.backgroundColor = data.btnBgColor;
+        }
+        if (data.color !== undefined) {
+          el.style.color = data.color;
+          el.style.setProperty("color", data.color, "important");
+        }
+        if (data.bold !== undefined) {
+          el.style.fontWeight = data.bold ? "bold" : "normal";
+        }
+        if (data.italic !== undefined) {
+          el.style.fontStyle = data.italic ? "italic" : "normal";
+        }
+        if (data.font !== undefined) {
+          const fontClasses = ["font-cormorant", "font-aniyah", "font-serif-title", "font-script", "font-sans", "font-cinzel"];
+          fontClasses.forEach(c => el.classList.remove(c));
+          if (data.font) el.classList.add(data.font);
+        }
+        return;
+      }
+
       if (data.text !== undefined) {
         if (data.text.includes("\n")) {
           el.innerHTML = data.text.split("\n").map(l => l.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")).join("<br>");
@@ -1608,9 +2034,150 @@ window.addEventListener("message", (event) => {
       }
       if (data.color !== undefined) {
         el.style.color = data.color;
+        el.style.setProperty("color", data.color, "important");
       }
       if (data.size !== undefined) {
         el.style.fontSize = `${data.size}${data.sizeUnit || "px"}`;
+      }
+      if (data.bold !== undefined) {
+        el.style.fontWeight = data.bold ? "bold" : "normal";
+      }
+      if (data.italic !== undefined) {
+        el.style.fontStyle = data.italic ? "italic" : "normal";
+      }
+      if (data.font !== undefined) {
+        const fontClasses = ["font-cormorant", "font-aniyah", "font-serif-title", "font-script", "font-sans", "font-cinzel"];
+        fontClasses.forEach(c => el.classList.remove(c));
+        if (data.font) el.classList.add(data.font);
+      }
+      if (data.align !== undefined) {
+        el.style.textAlign = data.align;
+      }
+      if (data.lineHeight !== undefined) {
+        el.style.lineHeight = data.lineHeight;
+      }
+    }
+  } else if (data.type === "SELECT_ELEMENT") {
+    if (data.key === "bank_cards_style") {
+      const modal = document.getElementById("welcome-modal");
+      const rsvpModal = document.getElementById("rsvp-modal");
+      if (modal && !modal.classList.contains("hidden-modal") && modal.style.display !== "none") {
+        modal.style.display = "none";
+      }
+      if (rsvpModal) rsvpModal.classList.add("hidden");
+
+      const cards = document.querySelectorAll(".bank-card-box");
+      const bcpCard = document.getElementById("bank-card-bcp");
+      if (bcpCard) {
+        bcpCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      cards.forEach(c => {
+        const prevOutline = c.style.outline;
+        const prevOffset = c.style.outlineOffset;
+        c.style.outline = "2px solid #dfba73";
+        c.style.outlineOffset = "4px";
+        setTimeout(() => {
+          c.style.outline = prevOutline;
+          c.style.outlineOffset = prevOffset;
+        }, 1400);
+      });
+
+      if (window.parent) {
+        window.parent.postMessage({
+          type: "ELEMENT_DATA_RESPONSE",
+          key: data.key,
+          data: extractEditableData(bcpCard || cards[0])
+        }, "*");
+      }
+      return;
+    }
+
+    if (data.key === "countdown_digits") {
+      const modal = document.getElementById("welcome-modal");
+      const rsvpModal = document.getElementById("rsvp-modal");
+      const bankModal = document.getElementById("bank-modal");
+      if (modal && !modal.classList.contains("hidden-modal") && modal.style.display !== "none") {
+        modal.style.display = "none";
+      }
+      if (rsvpModal) rsvpModal.classList.add("hidden");
+      if (bankModal) bankModal.classList.add("hidden");
+
+      const digits = document.querySelectorAll(".countdown-digit-val, #countdown-days, #countdown-hours, #countdown-minutes, #countdown-seconds");
+      const daysEl = document.getElementById("countdown-days");
+      if (daysEl) {
+        daysEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+      digits.forEach(d => {
+        const prevOutline = d.style.outline;
+        const prevOffset = d.style.outlineOffset;
+        d.style.outline = "2px solid #dfba73";
+        d.style.outlineOffset = "4px";
+        setTimeout(() => {
+          d.style.outline = prevOutline;
+          d.style.outlineOffset = prevOffset;
+        }, 1400);
+      });
+
+      if (window.parent) {
+        window.parent.postMessage({
+          type: "ELEMENT_DATA_RESPONSE",
+          key: data.key,
+          data: extractEditableData(daysEl || digits[0])
+        }, "*");
+      }
+      return;
+    }
+
+    const el = document.querySelector(`[data-edit="${data.key}"]`);
+    if (el) {
+      const modal = document.getElementById("welcome-modal");
+      const rsvpModal = document.getElementById("rsvp-modal");
+
+      if (data.key.startsWith("modal_")) {
+        if (modal) {
+          modal.classList.remove("hidden-modal");
+          modal.style.display = "flex";
+        }
+        if (rsvpModal) rsvpModal.classList.add("hidden");
+      } else if (data.key.startsWith("rsvp_modal_") || data.key.startsWith("rsvp_opt_") || data.key === "rsvp_question") {
+        if (modal) modal.style.display = "none";
+        if (rsvpModal) rsvpModal.classList.add("hidden");
+      } else {
+        if (modal && !modal.classList.contains("hidden-modal") && modal.style.display !== "none") {
+          modal.style.display = "none";
+        }
+        if (rsvpModal) rsvpModal.classList.add("hidden");
+      }
+
+      setTimeout(() => {
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        const prevOutline = el.style.outline;
+        const prevOffset = el.style.outlineOffset;
+        el.style.outline = "2px solid #dfba73";
+        el.style.outlineOffset = "4px";
+        setTimeout(() => {
+          el.style.outline = prevOutline;
+          el.style.outlineOffset = prevOffset;
+        }, 1400);
+      }, 60);
+
+      if (window.parent) {
+        window.parent.postMessage({
+          type: "ELEMENT_DATA_RESPONSE",
+          key: data.key,
+          data: extractEditableData(el)
+        }, "*");
+      }
+    }
+  } else if (data.type === "TOGGLE_ENVELOPE_VIEW") {
+    const modal = document.getElementById("welcome-modal");
+    if (modal) {
+      const isVisible = !modal.classList.contains("hidden-modal") && modal.style.display !== "none";
+      if (isVisible) {
+        modal.style.display = "none";
+      } else {
+        modal.classList.remove("hidden-modal");
+        modal.style.display = "flex";
       }
     }
   } else if (data.type === "TOGGLE_ENVELOPE") {
@@ -1618,11 +2185,131 @@ window.addEventListener("message", (event) => {
     if (modal) {
       modal.style.display = data.open ? "none" : "flex";
     }
+  } else if (data.type === "REQUEST_ALL_ELEMENTS") {
+    sendAllElementsToParent();
   } else if (data.type === "SYNC_ALL") {
     const fields = data.fields;
     if (!fields) return;
     for (const key in fields) {
       const item = fields[key];
+
+      if (key === "bank_cards_style") {
+        const cards = document.querySelectorAll(".bank-card-box");
+        const val = (item.opacity !== undefined) ? parseInt(item.opacity, 10) : (item.size !== undefined ? parseInt(item.size, 10) : NaN);
+        if (!isNaN(val)) {
+          const alpha = Math.max(0, Math.min(100, val)) / 100;
+          cards.forEach(c => {
+            if (alpha === 0) {
+              c.style.backgroundColor = "transparent";
+              c.style.boxShadow = "none";
+            } else {
+              c.style.backgroundColor = `rgba(255, 255, 255, ${alpha})`;
+            }
+          });
+        }
+        if (item.border !== undefined) {
+          cards.forEach(c => {
+            if (item.border === false) c.style.borderColor = "transparent";
+            else c.style.borderColor = "";
+          });
+        }
+        continue;
+      }
+
+      if (key === "countdown_digits") {
+        const digits = document.querySelectorAll(".countdown-digit-val, #countdown-days, #countdown-hours, #countdown-minutes, #countdown-seconds");
+        const separators = document.querySelectorAll(".countdown-separator");
+        if (item.size !== undefined) {
+          const sz = parseInt(item.size, 10);
+          if (!isNaN(sz)) {
+            digits.forEach(d => d.style.fontSize = `${sz}px`);
+            const sepSize = Math.max(14, Math.round(sz * 0.7));
+            separators.forEach(s => s.style.fontSize = `${sepSize}px`);
+          }
+        }
+        if (item.color !== undefined) {
+          digits.forEach(d => {
+            d.style.color = item.color;
+            d.style.setProperty("color", item.color, "important");
+          });
+        }
+        if (item.bold !== undefined) digits.forEach(d => d.style.fontWeight = item.bold ? "bold" : "normal");
+        if (item.italic !== undefined) digits.forEach(d => d.style.fontStyle = item.italic ? "italic" : "normal");
+        if (item.font !== undefined) {
+          const fontClasses = ["font-cormorant", "font-aniyah", "font-serif-title", "font-script", "font-sans", "font-cinzel"];
+          digits.forEach(d => {
+            fontClasses.forEach(c => d.classList.remove(c));
+            if (item.font) d.classList.add(item.font);
+          });
+        }
+        continue;
+      }
+
+      if (key === "date_heart_badge") {
+        const heartBadge = document.querySelector('[data-edit="date_heart_badge"]');
+        if (heartBadge) {
+          if (item.size !== undefined) {
+            const sz = parseInt(item.size, 10);
+            if (!isNaN(sz)) {
+              heartBadge.style.width = `${sz}px`;
+              heartBadge.style.height = `${Math.round(sz * 0.95)}px`;
+            }
+          }
+          if (item.color !== undefined) {
+            const heartPath = heartBadge.querySelector("#dateHeartPath") || heartBadge.querySelector("path[fill]:not([fill='#faf7f2'])");
+            if (heartPath) {
+              heartPath.setAttribute("fill", item.color);
+              heartPath.style.fill = item.color;
+            }
+          }
+        }
+        continue;
+      }
+
+      if (key === "bank_bcp_btn" || key === "bank_yape_btn") {
+        const btnEl = document.querySelector(`[data-edit="${key}"]`);
+        if (btnEl) {
+          if (item.text !== undefined) {
+            const textSpan = btnEl.querySelector(".btn-text-content");
+            if (textSpan) textSpan.textContent = item.text;
+          }
+          if (item.size !== undefined) btnEl.style.fontSize = `${item.size}px`;
+          if (item.paddingY !== undefined) {
+            const py = parseInt(item.paddingY, 10);
+            if (!isNaN(py)) {
+              btnEl.style.paddingTop = `${py}px`;
+              btnEl.style.paddingBottom = `${py}px`;
+            }
+          }
+          if (item.widthMode !== undefined) {
+            if (item.widthMode === "compact") {
+              btnEl.classList.remove("w-full");
+              btnEl.classList.add("w-auto", "mx-auto", "px-6");
+              btnEl.style.width = "fit-content";
+              btnEl.style.margin = "0 auto";
+            } else {
+              btnEl.classList.add("w-full");
+              btnEl.classList.remove("w-auto", "mx-auto", "px-6");
+              btnEl.style.width = "100%";
+              btnEl.style.margin = "";
+            }
+          }
+          if (item.btnBgColor !== undefined) btnEl.style.backgroundColor = item.btnBgColor;
+          if (item.color !== undefined) {
+            btnEl.style.color = item.color;
+            btnEl.style.setProperty("color", item.color, "important");
+          }
+          if (item.bold !== undefined) btnEl.style.fontWeight = item.bold ? "bold" : "normal";
+          if (item.italic !== undefined) btnEl.style.fontStyle = item.italic ? "italic" : "normal";
+          if (item.font !== undefined) {
+            const fontClasses = ["font-cormorant", "font-aniyah", "font-serif-title", "font-script", "font-sans", "font-cinzel"];
+            fontClasses.forEach(c => btnEl.classList.remove(c));
+            if (item.font) btnEl.classList.add(item.font);
+          }
+        }
+        continue;
+      }
+
       const target = document.querySelector(`[data-edit="${key}"]`);
       if (target) {
         if (item.text !== undefined) {
@@ -1634,6 +2321,15 @@ window.addEventListener("message", (event) => {
         }
         if (item.color !== undefined) target.style.color = item.color;
         if (item.size !== undefined) target.style.fontSize = `${item.size}${item.sizeUnit || "px"}`;
+        if (item.bold !== undefined) target.style.fontWeight = item.bold ? "bold" : "normal";
+        if (item.italic !== undefined) target.style.fontStyle = item.italic ? "italic" : "normal";
+        if (item.font !== undefined) {
+          const fontClasses = ["font-cormorant", "font-aniyah", "font-serif-title", "font-script", "font-sans", "font-cinzel"];
+          fontClasses.forEach(c => target.classList.remove(c));
+          if (item.font) target.classList.add(item.font);
+        }
+        if (item.align !== undefined) target.style.textAlign = item.align;
+        if (item.lineHeight !== undefined) target.style.lineHeight = item.lineHeight;
       }
     }
   } else if (data.type === "UPDATE_GLOBAL_STYLE") {
@@ -1715,12 +2411,12 @@ window.addEventListener("message", (event) => {
     if (introHeader) {
       introHeader.classList.remove("header-full-disappear");
     }
-    if (instructionText) {
-      instructionText.innerText = "";
-      instructionText.classList.remove("animate-pulse");
-      instructionText.classList.add("hidden");
-    }
-    
+    // Limpiar contornos temporales del editor
+    document.querySelectorAll("[data-edit]").forEach(el => {
+      el.style.outline = "";
+      el.style.outlineOffset = "";
+    });
+
     // 3. Capturar el HTML completo y limpio
     const fullHtml = "<!DOCTYPE html>\n" + document.documentElement.outerHTML;
     

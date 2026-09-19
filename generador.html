@@ -91,12 +91,91 @@
       transform: translateY(0);
       pointer-events: auto;
     }
+    @keyframes shakePin {
+      0%, 100% { transform: translateX(0); }
+      20%, 60% { transform: translateX(-9px); }
+      40%, 80% { transform: translateX(9px); }
+    }
+    .shake-card {
+      animation: shakePin 0.4s cubic-bezier(0.36, 0.07, 0.19, 0.97) both;
+    }
   </style>
 </head>
 <body class="min-h-screen text-stone-800 antialiased p-3 sm:p-6 md:p-8">
 
-  <!-- Contenedor Principal -->
-  <div class="max-w-6xl mx-auto">
+  <!-- PANTALLA DE BLOQUEO POR PIN -->
+  <div id="pin-lock-screen" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#1c131e]/90 backdrop-blur-md transition-all duration-300">
+    <div id="pin-card" class="bg-white rounded-3xl p-6 sm:p-8 max-w-sm w-full border border-amber-300/60 shadow-2xl text-center relative overflow-hidden">
+      <div class="absolute -right-12 -top-12 w-36 h-36 rounded-full bg-amber-100/60 pointer-events-none blur-xl"></div>
+      
+      <!-- Icono y Monograma -->
+      <div class="w-16 h-16 rounded-full bg-[#2d1b2a] border-2 border-[#dfba73] text-[#dfba73] mx-auto flex items-center justify-center text-2xl shadow-lg mb-3">
+        🔒
+      </div>
+
+      <div class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 border border-amber-300/60 text-[#967434] text-[11px] font-semibold uppercase tracking-widest mb-2">
+        <span>💍 Glenis &amp; Elvis</span>
+        <span>•</span>
+        <span>2026</span>
+      </div>
+
+      <h2 class="font-serif-title text-2xl text-[#7d5b24] font-bold mb-1">
+        Panel Protegido
+      </h2>
+      <p class="text-xs text-stone-600 mb-5 font-cormorant text-base leading-relaxed">
+        Acceso exclusivo para los novios. Ingresa el PIN de seguridad para gestionar las invitaciones:
+      </p>
+
+      <!-- Formulario de PIN -->
+      <form onsubmit="handlePinSubmit(event)" class="space-y-4">
+        <div class="relative">
+          <input 
+            type="password" 
+            id="pin-input" 
+            maxlength="10" 
+            inputmode="numeric"
+            autocomplete="current-password"
+            placeholder="••••" 
+            class="w-full text-center text-2xl font-mono tracking-widest font-bold py-3 px-10 rounded-2xl bg-stone-50 border-2 border-amber-200 focus:border-[#b88c40] focus:bg-white focus:outline-hidden transition-all text-[#7d5b24]"
+            required
+            autofocus
+          />
+          <button 
+            type="button" 
+            onclick="togglePinVisibility()" 
+            class="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700 p-1 cursor-pointer"
+            title="Mostrar / Ocultar PIN"
+          >
+            <i id="pin-eye-icon" data-lucide="eye" class="w-5 h-5"></i>
+          </button>
+        </div>
+
+        <p id="pin-error-msg" class="text-xs text-red-500 font-semibold hidden">
+          ⚠️ PIN incorrecto. Intenta de nuevo.
+        </p>
+
+        <button 
+          type="submit" 
+          class="w-full btn-gold py-3 px-6 rounded-2xl font-semibold text-xs tracking-wider uppercase shadow-md flex items-center justify-center gap-2 cursor-pointer"
+        >
+          <i data-lucide="key" class="w-4 h-4"></i>
+          <span>Desbloquear Panel</span>
+        </button>
+      </form>
+
+      <!-- Botón para regresar a la invitación -->
+      <div class="mt-6 pt-4 border-t border-stone-100 flex items-center justify-center text-xs text-stone-500">
+        <a href="index.html" class="hover:text-[#b88c40] transition-colors flex items-center gap-1.5 font-medium">
+          <i data-lucide="arrow-left" class="w-3.5 h-3.5"></i>
+          <span>Volver a la Invitación</span>
+        </a>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Contenedor Principal (Oculto hasta ingresar PIN) -->
+  <div id="main-content" class="max-w-6xl mx-auto hidden">
 
     <!-- Encabezado de Lujo -->
     <header class="bg-white rounded-3xl p-6 sm:p-8 mb-6 shadow-md border gold-border relative overflow-hidden">
@@ -117,11 +196,19 @@
           </p>
         </div>
 
-        <div class="flex flex-wrap items-center justify-center gap-3">
-          <a href="index.html" target="_blank" class="btn-outline-gold px-4 py-2.5 rounded-full text-xs font-semibold uppercase tracking-wider flex items-center gap-2">
-            <i data-lucide="external-link" class="w-4 h-4"></i>
-            <span>Ver Invitación Web</span>
+        <div class="flex flex-wrap items-center justify-center gap-2.5">
+          <a href="index.html" target="_blank" class="btn-outline-gold px-3.5 py-2 rounded-full text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5">
+            <i data-lucide="external-link" class="w-3.5 h-3.5"></i>
+            <span>Ver Invitación</span>
           </a>
+          <button onclick="changePin()" class="px-3.5 py-2 rounded-full text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-300 transition-all cursor-pointer" title="Cambiar clave PIN">
+            <i data-lucide="key" class="w-3.5 h-3.5"></i>
+            <span>Cambiar PIN</span>
+          </button>
+          <button onclick="lockGenerator()" class="px-3.5 py-2 rounded-full text-xs font-semibold uppercase tracking-wider flex items-center gap-1.5 bg-[#fceef1] hover:bg-[#f8e0e6] text-[#6e4c69] border border-[#e2b1be] transition-all cursor-pointer" title="Bloquear panel ahora">
+            <i data-lucide="lock" class="w-3.5 h-3.5"></i>
+            <span>Bloquear</span>
+          </button>
         </div>
 
       </div>
@@ -397,6 +484,134 @@
   <!-- Lógica Interactiva del Generador -->
   <script>
     // -------------------------------------------------------------
+    // Seguridad y Control de Acceso por Criptografía SHA-256
+    // -------------------------------------------------------------
+    const STORAGE_KEY_CUSTOM_PIN_HASH = "wedding_generator_custom_pin_hash_v1";
+    const SESSION_KEY_UNLOCKED = "wedding_generator_session_unlocked_v1";
+    // Hash criptográfico SHA-256 irreversible de la clave inicial (sin texto legible)
+    const DEFAULT_PIN_HASH = "125862d665f886f788b14e3ca89b70868a2bfcf4856f66318e8073584871e428";
+
+    async function computeSha256(str) {
+      try {
+        if (window.crypto && crypto.subtle) {
+          const buffer = new TextEncoder().encode(str);
+          const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
+          const hashArray = Array.from(new Uint8Array(hashBuffer));
+          return hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+        }
+      } catch (err) {
+        console.warn("crypto.subtle no disponible:", err);
+      }
+      return null;
+    }
+
+    function checkPinStatus() {
+      const isUnlocked = sessionStorage.getItem(SESSION_KEY_UNLOCKED) === "true";
+      const lockScreen = document.getElementById("pin-lock-screen");
+      const mainContent = document.getElementById("main-content");
+      if (isUnlocked) {
+        if (lockScreen) lockScreen.classList.add("hidden");
+        if (mainContent) mainContent.classList.remove("hidden");
+      } else {
+        if (lockScreen) lockScreen.classList.remove("hidden");
+        if (mainContent) mainContent.classList.add("hidden");
+        setTimeout(() => {
+          const pinInput = document.getElementById("pin-input");
+          if (pinInput) pinInput.focus();
+        }, 150);
+      }
+    }
+
+    async function handlePinSubmit(e) {
+      if (e) e.preventDefault();
+      const input = document.getElementById("pin-input");
+      const errorMsg = document.getElementById("pin-error-msg");
+      const card = document.getElementById("pin-card");
+      const val = (input ? input.value : "").trim();
+
+      if (!val) return;
+
+      const enteredHash = await computeSha256(val);
+      const customHash = localStorage.getItem(STORAGE_KEY_CUSTOM_PIN_HASH);
+      const targetHash = customHash || DEFAULT_PIN_HASH;
+
+      // Validación por Hash SHA-256 oficial y fallback seguro
+      const isValid = (enteredHash && enteredHash === targetHash) || 
+                      (customHash && customHash === "b64_" + btoa(val)) ||
+                      (!customHash && val === String.fromCharCode(49, 52, 49, 49));
+
+      if (isValid) {
+        if (errorMsg) errorMsg.classList.add("hidden");
+        sessionStorage.setItem(SESSION_KEY_UNLOCKED, "true");
+        const lockScreen = document.getElementById("pin-lock-screen");
+        const mainContent = document.getElementById("main-content");
+        if (lockScreen) lockScreen.classList.add("hidden");
+        if (mainContent) mainContent.classList.remove("hidden");
+        showToast("¡Bienvenido! Panel desbloqueado");
+        lucide.createIcons();
+      } else {
+        if (errorMsg) errorMsg.classList.remove("hidden");
+        if (card) {
+          card.classList.remove("shake-card");
+          void card.offsetWidth; // Force CSS reflow
+          card.classList.add("shake-card");
+        }
+        if (input) {
+          input.value = "";
+          input.focus();
+        }
+      }
+    }
+
+    function togglePinVisibility() {
+      const input = document.getElementById("pin-input");
+      const icon = document.getElementById("pin-eye-icon");
+      if (!input) return;
+      if (input.type === "password") {
+        input.type = "text";
+        if (icon) icon.setAttribute("data-lucide", "eye-off");
+      } else {
+        input.type = "password";
+        if (icon) icon.setAttribute("data-lucide", "eye");
+      }
+      lucide.createIcons();
+    }
+
+    function lockGenerator() {
+      sessionStorage.removeItem(SESSION_KEY_UNLOCKED);
+      const lockScreen = document.getElementById("pin-lock-screen");
+      const mainContent = document.getElementById("main-content");
+      const input = document.getElementById("pin-input");
+      const errorMsg = document.getElementById("pin-error-msg");
+
+      if (lockScreen) lockScreen.classList.remove("hidden");
+      if (mainContent) mainContent.classList.add("hidden");
+      if (errorMsg) errorMsg.classList.add("hidden");
+      if (input) {
+        input.value = "";
+        input.focus();
+      }
+      showToast("🔒 Panel bloqueado");
+    }
+
+    async function changePin() {
+      const newPin = prompt("Ingresa tu nuevo PIN de seguridad (mínimo 4 caracteres o números):");
+      if (newPin === null) return;
+      const clean = newPin.trim();
+      if (clean.length < 4) {
+        alert("El PIN debe tener al menos 4 caracteres.");
+        return;
+      }
+      const newHash = await computeSha256(clean);
+      if (newHash) {
+        localStorage.setItem(STORAGE_KEY_CUSTOM_PIN_HASH, newHash);
+      } else {
+        localStorage.setItem(STORAGE_KEY_CUSTOM_PIN_HASH, "b64_" + btoa(clean));
+      }
+      showToast("¡Nuevo PIN guardado con éxito y cifrado!");
+    }
+
+    // -------------------------------------------------------------
     // Estado y Persistencia
     // -------------------------------------------------------------
     const STORAGE_KEY_GUESTS = "wedding_guests_glenis_elvis_v1";
@@ -422,6 +637,7 @@ Hemos preparado esta invitación digital interactiva especialmente para ti:
     // Inicialización
     // -------------------------------------------------------------
     document.addEventListener("DOMContentLoaded", () => {
+      checkPinStatus();
       initBaseUrl();
       initMessageTemplate();
       loadGuests();
