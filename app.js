@@ -27,6 +27,33 @@ const ENVELOPE_CONFIG = {
 let isEnvelopeOpen = false;
 let isEnvelopeVideoStarted = false;
 
+// Asegurar que el sobre empiece 100% cerrado y esperando el toque del sello
+function initEnvelopeState() {
+  isEnvelopeOpen = false;
+  isEnvelopeVideoStarted = false;
+  const envelopeScreen = document.getElementById("envelopeScreen");
+  const stageWrapper = document.getElementById("stageWrapper");
+  const sealButton = document.getElementById("sealButtonContainer");
+  const envelopeVideo = document.getElementById("envelopeVideo");
+  const instructionText = document.getElementById("instructionText");
+  const introHeader = document.getElementById("introHeader");
+
+  if (envelopeScreen) envelopeScreen.classList.remove("card-is-active");
+  if (stageWrapper) stageWrapper.classList.remove("card-is-active");
+  if (sealButton) sealButton.classList.remove("seal-opened");
+  if (introHeader) introHeader.classList.remove("header-full-disappear");
+  if (instructionText) {
+    instructionText.classList.add("hidden");
+    instructionText.innerText = "";
+  }
+  if (envelopeVideo) {
+    try {
+      envelopeVideo.pause();
+      envelopeVideo.currentTime = 0;
+    } catch(e) {}
+  }
+}
+
 // Función para cambiar de modo dinámicamente en cualquier momento sin tocar el HTML
 function setEnvelopeMode(mode) {
   const envelopeScreen = document.getElementById("envelopeScreen");
@@ -456,7 +483,7 @@ function openBankModal() {
 
 function closeBankModal() {}
 
-const GOOGLE_SHEET_URL = "https://script.google.com/macros/s/AKfycbwylXAgFT3TtUweip5Fctvr77VXMgHqLRNKkHW7I1twy9lRln3LTJtfNs5br9ClcDKCTg/exec";
+const GOOGLE_SHEET_URL = "https://script.google.com/macros/s/AKfycbz8k-jWqNmZdOyRVB7EhtSBWk5Q7tP-mVh3NsTZ8p5PdI_LKnNFNslMsd2gLwKHip13gw/exec";
 
 // Función asíncrona para registrar en Google Sheets (Apps Script)
 async function sendToGoogleSheet(payload) {
@@ -479,7 +506,26 @@ async function sendToGoogleSheet(payload) {
 // -------------------------------------------------------------
 // Utilidades de Identificación de Invitado y Persistencia Local
 // -------------------------------------------------------------
+function getGuestId() {
+  const params = new URLSearchParams(window.location.search);
+  const paramId = params.get("id");
+  if (paramId && paramId.trim()) {
+    return paramId.trim();
+  }
+  const paramName = params.get("para") || params.get("invitado") || params.get("guest") || params.get("de") || "";
+  if (paramName && paramName.trim()) {
+    return "guest_" + paramName.trim().toLowerCase().replace(/[^a-z0-9]/g, "_");
+  }
+  const input = document.getElementById("guest-name") || document.getElementById("wishes-author");
+  const fallback = input ? input.value.trim() : "";
+  return fallback ? "guest_" + fallback.toLowerCase().replace(/[^a-z0-9]/g, "_") : "invitado_general";
+}
+
 function getNormalizedGuestKey(rawName) {
+  const gid = getGuestId();
+  if (gid && gid !== "invitado_general") {
+    return gid;
+  }
   let name = rawName;
   if (!name) {
     const params = new URLSearchParams(window.location.search);
@@ -497,7 +543,8 @@ function getNormalizedGuestKey(rawName) {
 // -------------------------------------------------------------
 function queryGoogleSheet(action, guestName) {
   return new Promise((resolve) => {
-    if (!guestName || !guestName.trim()) {
+    const guestId = getGuestId();
+    if (!guestName && !guestId) {
       resolve({ exists: false, empty: true });
       return;
     }
@@ -537,7 +584,7 @@ function queryGoogleSheet(action, guestName) {
         resolved = true;
         cleanup();
         // Fallback vía fetch
-        const fetchUrl = `${GOOGLE_SHEET_URL}?action=${encodeURIComponent(action)}&invitado=${encodeURIComponent(guestName)}&t=${Date.now()}`;
+        const fetchUrl = `${GOOGLE_SHEET_URL}?action=${encodeURIComponent(action)}&invitado=${encodeURIComponent(guestName || "")}&id=${encodeURIComponent(guestId)}&t=${Date.now()}`;
         fetch(fetchUrl)
           .then(r => r.json())
           .then(data => resolve(data))
@@ -545,7 +592,7 @@ function queryGoogleSheet(action, guestName) {
       }
     };
 
-    const url = `${GOOGLE_SHEET_URL}?action=${encodeURIComponent(action)}&invitado=${encodeURIComponent(guestName)}&callback=${callbackName}&t=${Date.now()}`;
+    const url = `${GOOGLE_SHEET_URL}?action=${encodeURIComponent(action)}&invitado=${encodeURIComponent(guestName || "")}&id=${encodeURIComponent(guestId)}&callback=${callbackName}&t=${Date.now()}`;
     script.src = url;
     document.body.appendChild(script);
   });
@@ -989,13 +1036,23 @@ async function handleRSVPSubmit(event) {
   const previouslyRegistered = localStorage.getItem("wedding_rsvp_" + guestKey);
   const tipoRegistro = previouslyRegistered ? "RSVP (Actualización)" : "RSVP";
 
+  let savedWishText = "—";
+  try {
+    const rawWish = localStorage.getItem("wedding_wish_" + guestKey);
+    if (rawWish) {
+      const parsedWish = JSON.parse(rawWish);
+      if (parsedWish && parsedWish.wish) savedWishText = parsedWish.wish;
+    }
+  } catch (e) {}
+
   const payload = {
     tipo: tipoRegistro,
+    id: getGuestId(),
     invitado: titular,
     asistencia: asistencia,
     pases: pases,
     asistentes: asistentes,
-    mensaje: "—"
+    mensaje: savedWishText
   };
 
   try {
@@ -1068,19 +1125,36 @@ async function sendWishMessage(event) {
     submitBtn.innerHTML = `<span>ENVIANDO... ⏳</span>`;
   }
 
+  const guestKey = getNormalizedGuestKey(senderName);
+  let savedRSVPAssist = "—";
+  let savedRSVPPases = "—";
+  let savedRSVPAssistentes = "—";
+  try {
+    const rawRSVP = localStorage.getItem("wedding_rsvp_" + guestKey);
+    if (rawRSVP) {
+      const parsedRSVP = JSON.parse(rawRSVP);
+      if (parsedRSVP) {
+        if (parsedRSVP.attendance === "yes") savedRSVPAssist = "SÍ ASISTIRÁ";
+        else if (parsedRSVP.attendance === "no") savedRSVPAssist = "NO ASISTIRÁ";
+        if (parsedRSVP.pases) savedRSVPPases = parsedRSVP.pases;
+        if (parsedRSVP.asistentes) savedRSVPAssistentes = parsedRSVP.asistentes;
+      }
+    }
+  } catch (e) {}
+
   const payload = {
     tipo: "BUZÓN",
+    id: getGuestId(),
     invitado: senderName,
-    asistencia: "—",
-    pases: "—",
-    asistentes: "—",
+    asistencia: savedRSVPAssist,
+    pases: savedRSVPPases,
+    asistentes: savedRSVPAssistentes,
     mensaje: wish
   };
 
   await sendToGoogleSheet(payload);
 
   // Guardar en localStorage para este invitado
-  const guestKey = getNormalizedGuestKey(senderName);
   try {
     localStorage.setItem("wedding_wish_" + guestKey, JSON.stringify({
       author: senderName,
@@ -1584,6 +1658,7 @@ function initDressCodeMedallion3D() {
 // Inicialización al cargar la página y puente en tiempo real
 // -------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
+  initEnvelopeState();
   initCountdown();
   makeHeartImageTransparent();
   initGuestName();
@@ -2396,6 +2471,14 @@ window.addEventListener("message", (event) => {
       envelopeElement.classList.remove("envelope-open");
       envelopeElement.classList.remove("envelope-state-open");
       envelopeElement.classList.remove("card-is-active");
+    }
+    const envScreen = document.getElementById("envelopeScreen");
+    const stgWrapper = document.getElementById("stageWrapper");
+    if (envScreen) envScreen.classList.remove("card-is-active");
+    if (stgWrapper) stgWrapper.classList.remove("card-is-active");
+    if (instructionText) {
+      instructionText.classList.add("hidden");
+      instructionText.innerText = "";
     }
     const sealBtn = document.getElementById("sealButtonContainer");
     if (sealBtn) {

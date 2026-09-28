@@ -259,7 +259,7 @@ body {
   font-weight: 700;
   font-size: 2.15rem;
   line-height: 1;
-  color: #ffffff !important;
+  color: #ffffff;
   text-shadow: 0 1px 4px rgba(70, 25, 65, 0.55);
   transform: translateY(-2px);
   animation: numberSubtlePulse 3.5s ease-in-out infinite;
@@ -283,7 +283,6 @@ body {
   }
   50% {
     transform: translateY(-2px) scale(1.03);
-    color: #967434;
   }
 }
 

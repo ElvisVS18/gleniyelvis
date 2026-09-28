@@ -909,9 +909,13 @@ Hemos preparado esta invitación digital interactiva especialmente para ti:
         baseUrl = getAutoBaseUrl();
       }
       baseUrl = cleanBaseUrl(baseUrl);
+      if (!guest.id) {
+        guest.id = "g_" + Date.now() + "_" + Math.random().toString(36).substr(2, 5);
+        if (typeof saveGuests === "function") saveGuests();
+      }
       const encodedName = encodeURIComponent(guest.name);
       const separator = baseUrl.includes("?") ? "&" : "?";
-      return `${baseUrl}${separator}para=${encodedName}&pases=${guest.passes}`;
+      return `${baseUrl}${separator}para=${encodedName}&pases=${guest.passes}&id=${encodeURIComponent(guest.id)}`;
     }
 
     function buildWhatsAppText(guest) {
@@ -922,7 +926,7 @@ Hemos preparado esta invitación digital interactiva especialmente para ti:
       if (guest.passes === 1) {
         passText = "🎟️ *Pase individual (1 persona)* asignado para ti.";
       } else if (guest.passes > 1) {
-        passText = `🎟️ *Pase para ${guest.passes} personas* asignado para ti y tus acompañantes.`;
+        passText = `🎟️ *Pase para ${guest.passes} personas* asignado para ti y tú acompañante.`;
       }
 
       return template
